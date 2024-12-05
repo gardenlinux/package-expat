@@ -4,6 +4,7 @@ pkg=expat
 version_orig=2.6.4
 version="$version_orig-1"
 curl -L https://snapshot.debian.org/archive/debian-debug/20241108T203439Z/pool/main/e/expat/expat_2.6.4.orig.tar.gz | gzip -d | tee "$dir/orig.tar" | tar --extract --strip-components 1 --directory "$dir/src"
+mkdir "$dir/src/debian"
 curl -L https://snapshot.debian.org/archive/debian-debug/20241108T203439Z/pool/main/e/expat/expat_2.6.4-1.debian.tar.xz | xz -d | tee "$dir/debian.tar" | tar --extract --strip-components 1 --directory "$dir/src/debian"
 apply_patches
 version_suffix=gl1
