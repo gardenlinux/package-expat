@@ -1,11 +1,11 @@
 apt-get install --no-install-recommends -y curl ca-certificates
 
 pkg=expat
-version_orig=2.7.4
+version_orig=2.8.1
 version="$version_orig-1"
-version_suffix=gl0~bp1877
+version_suffix=gl0~bp2150
 mkdir -p "$dir/src"
-curl -L https://snapshot.debian.org/archive/debian/20260205T142530Z/pool/main/e/expat/expat_2.7.4.orig.tar.gz | gzip -d | tee "$dir/orig.tar" | tar --extract --strip-components 1 --directory "$dir/src"
+curl -L https://snapshot.debian.org/archive/debian/20260611T023610Z/pool/main/e/expat/expat_2.8.1.orig.tar.gz | gzip -d | tee "$dir/orig.tar" | tar --extract --strip-components 1 --directory "$dir/src"
 mkdir -p "$dir/src/debian"
-curl -L https://snapshot.debian.org/archive/debian/20260205T142530Z/pool/main/e/expat/expat_2.7.4-1.debian.tar.xz | xz -d | tee "$dir/debian.tar" | tar --extract --strip-components 1 --directory "$dir/src/debian"
+curl -L https://snapshot.debian.org/archive/debian/20260611T023610Z/pool/main/e/expat/expat_2.8.1-1.debian.tar.xz | xz -d | tee "$dir/debian.tar" | tar --extract --strip-components 1 --directory "$dir/src/debian"
 apply_patches
