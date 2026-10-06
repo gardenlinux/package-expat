@@ -5,7 +5,7 @@ version_orig=2.8.4
 version="$version_orig-2"
 version_suffix=gl0~bp2150
 
-debian_snapshot="20260907T082400Z"
+debian_snapshot="20261006T024027Z"
 
 mkdir -p "$dir/src"
 curl -L https://snapshot.debian.org/archive/debian/$debian_snapshot/pool/main/e/expat/expat_$version_orig.orig.tar.gz | gzip -d | tee "$dir/orig.tar" | tar --extract --strip-components 1 --directory "$dir/src"
