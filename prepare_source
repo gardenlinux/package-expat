@@ -2,7 +2,7 @@ apt-get install --no-install-recommends -y curl ca-certificates
 
 pkg=expat
 version_orig=2.8.4
-version="$version_orig-1"
+version="$version_orig-2"
 version_suffix=gl0~bp2150
 
 debian_snapshot="20260907T082400Z"
