@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+script_dir="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
+
+arch="${1:-$(dpkg --print-architecture)}"
+
+container=ghcr.io/gardenlinux/repo-debian-snapshot
+if [ -e "$script_dir/.container" ]; then
+	container="$(cat "$script_dir/.container")"
+fi
+
+# Read the upstream version from prepare_source
+source <(grep '^version_orig=' "$script_dir/prepare_source")
+
+# TEMPORARY FIX for https://github.com/actions/runner-images/issues/14473
+OCI_RUNTIME=$(command -v crun || true)
+
+podman ${OCI_RUNTIME:+--runtime "$OCI_RUNTIME"} run \
+	--security-opt seccomp=unconfined \
+	--arch "$arch" \
+	--rm \
+	-i \
+	-v "$script_dir/.build:/build:ro,Z" \
+	"$container" \
+	/bin/bash -euxo pipefail /dev/stdin << CONTAINEREOF
+
+arch="\$(dpkg --print-architecture)"
+
+# Install the freshly built packages from the bind-mounted .build directory
+apt-get install --no-install-recommends -y \
+	/build/libexpat1_${version_orig}*_"\${arch}".deb \
+	/build/libexpat1-dev_${version_orig}*_"\${arch}".deb \
+	/build/expat_${version_orig}*_"\${arch}".deb
+
+# Install build dependencies needed to compile and run the library test suite
+apt-get install --no-install-recommends -y \
+	build-essential \
+	autoconf \
+	automake \
+	libtool \
+	dpkg-dev
+
+workdir="\$(mktemp -d)"
+trap 'rm -rf "\$workdir"' EXIT
+
+# --- Library test suite (CVE-2026-124317) ------------------------------------
+#
+# runtests links against libtestpat.la, a private variant of libexpat compiled
+# with -DXML_TESTING that exposes internal symbols used by the test suite. It
+# cannot be substituted with the installed libexpat1.so. We therefore extract
+# the fully patched source via dpkg-source (which applies upstream_patches/
+# exactly as the binary build does) and run make check there, which builds
+# libtestpat and runtests from that same patched source.
+
+dpkg-source --extract /build/expat_${version_orig}-*.dsc "\$workdir/src"
+cd "\$workdir/src/expat"
+
+./buildconf.sh
+./configure --prefix=/usr
+make check
+
+# --- xmlwf symlink test (CVE-2026-128241) ------------------------------------
+#
+# CVE-2026-128241 is a symlink-following vulnerability in xmlwf's -d output
+# mode: before the fix, xmlwf used fopen("wb") to open output files, which
+# silently follows symlinks and truncates the link target. The fix switches to
+# open(..., O_NOFOLLOW), which causes the open to fail with ELOOP when the
+# output path is a symlink, leaving the link target untouched.
+#
+# make check does not cover xmlwf at all (it only runs runtests against the
+# in-tree library), so we test the installed /usr/bin/xmlwf directly here.
+#
+# The test reproduces the exact scenario from the upstream commit: place a
+# symlink named after the input file inside the output directory, then verify
+# that xmlwf -d refuses to follow it and that the link target is not truncated.
+
+cd "\$workdir"
+mkdir outdir
+
+# Create a file with known content that a vulnerable xmlwf would truncate
+echo "valuable content" > outdir/truncate_me
+
+# Place a symlink inside the output directory whose name matches the input
+# file that xmlwf will try to write (xmlwf -d <dir> writes <dir>/<inputfile>)
+ln -s truncate_me outdir/input.xml
+
+# Create a well-formed XML input file (xmlwf only writes output for valid XML)
+echo '<?xml version="1.0"?><root/>' > input.xml
+
+original_size=\$(stat -c %s outdir/truncate_me)
+
+# xmlwf should fail with a non-zero exit code because O_NOFOLLOW rejects the
+# symlink; we use || true so the script does not abort on that expected error
+xmlwf -d outdir/ input.xml || true
+
+actual_size=\$(stat -c %s outdir/truncate_me)
+
+if [ "\$actual_size" -ne "\$original_size" ]; then
+	echo "FAIL: CVE-2026-128241: xmlwf followed the symlink and truncated the target file"
+	exit 1
+fi
+
+echo "PASS: CVE-2026-128241: xmlwf correctly refused to follow the symlink"
+
+CONTAINEREOF
